@@ -207,14 +207,25 @@ def predict(model, sentences, vocabs, device):
             if use_char_cnn:
                 char_indices = []
                 for word in words:
+                    # Ensure word has at least 3 characters (for filter sizes up to 3)
+                    # by padding if necessary
                     word_chars = [
                         char_to_idx.get(c, char_to_idx["<unk>"]) for c in word
                     ]
+
+                    # If very short word, add padding to match minimum filter size
+                    # Adding explicit padding for short words
+                    min_len = 3  # Minimum padding length to handle filters of size 3
+                    if len(word_chars) < min_len:
+                        word_chars = word_chars + [0] * (min_len - len(word_chars))
+
                     char_indices.append(word_chars)
 
                 # Padding character indices
                 max_word_len = (
-                    max(len(chars) for chars in char_indices) if char_indices else 1
+                    max(len(chars) for chars in char_indices)
+                    if char_indices
+                    else min_len
                 )
                 padded_chars = [
                     chars + [0] * (max_word_len - len(chars)) for chars in char_indices

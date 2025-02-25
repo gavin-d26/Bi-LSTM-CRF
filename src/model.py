@@ -23,6 +23,8 @@ class CharCNN(nn.Module):
                 for k in filter_sizes
             ]
         )
+        self.filter_sizes = filter_sizes
+        self.char_hidden_dim = char_hidden_dim
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, char_indices):
@@ -51,13 +53,30 @@ class CharCNN(nn.Module):
 
         # Apply convolutions and max pooling
         conv_outputs = []
-        for conv in self.convs:
+        for i, conv in enumerate(self.convs):
+            # Check if input length is smaller than kernel size
+            kernel_size = self.filter_sizes[i]
+            if max_word_len < kernel_size:
+                # Fallback for very short sequences: use adaptive pooling
+                # Create a zero tensor with the expected output shape
+                dummy_output = torch.zeros(
+                    char_embeds.size(0),
+                    self.char_hidden_dim,
+                    device=char_indices.device,
+                )
+                conv_outputs.append(dummy_output)
+                continue
+
+            # Proceed with normal convolution for inputs longer than kernel_size
             conv_output = F.relu(
                 conv(char_embeds)
             )  # (batch_size * seq_len, char_hidden_dim, max_word_len - k + 1)
+
+            # Handle global max pooling
             conv_output = F.max_pool1d(
                 conv_output, conv_output.size(2)
             )  # (batch_size * seq_len, char_hidden_dim, 1)
+
             conv_outputs.append(
                 conv_output.squeeze(2)
             )  # (batch_size * seq_len, char_hidden_dim)
