@@ -1,4 +1,7 @@
 A2-data
 cursor_management
 output
+submission
+*.log
+results_summary.md
 *pycache*

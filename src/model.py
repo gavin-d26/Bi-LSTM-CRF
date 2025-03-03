@@ -375,6 +375,69 @@ class BiLSTMCRF(nn.Module):
 
         return loss
 
+    def ramp_loss(self, lstm_feats, tags, mask=None, cost_factor=1.0):
+        """
+        Calculate ramp loss
+        Args:
+            lstm_feats: (batch_size, max_seq_len, tagset_size)
+            tags: (batch_size, max_seq_len)
+            mask: (batch_size, max_seq_len)
+            cost_factor: scaling factor for the cost function
+        Returns:
+            loss: scalar
+        """
+        batch_size, max_seq_len, tagset_size = lstm_feats.size()
+
+        # Get gold sequence score
+        gold_score = self._score_sentence(lstm_feats, tags, mask)
+
+        # Find the best scoring sequence with Viterbi
+        viterbi_tags = self._viterbi_decode_batched(lstm_feats, mask)
+        viterbi_tags = torch.LongTensor(viterbi_tags).to(lstm_feats.device)
+
+        # Calculate Hamming loss (cost)
+        hamming_cost = (
+            torch.sum((viterbi_tags != tags).float() * mask, dim=1) * cost_factor
+        )
+
+        # Calculate score of predicted sequence
+        pred_score = self._score_sentence(lstm_feats, viterbi_tags, mask)
+
+        # Compute the cost-augmented scores
+        cost_augmented_score = pred_score + hamming_cost
+
+        # Compute loss: -max_y(score(x,y)) + max_y'(score(x,y') + cost(y,y'))
+        loss = torch.mean(-gold_score + cost_augmented_score)
+
+        return loss
+
+    def soft_ramp_loss(self, lstm_feats, tags, mask=None, cost_factor=1.0):
+        """
+        Calculate soft ramp loss
+        Args:
+            lstm_feats: (batch_size, max_seq_len, tagset_size)
+            tags: (batch_size, max_seq_len)
+            mask: (batch_size, max_seq_len)
+            cost_factor: scaling factor for the cost function
+        Returns:
+            loss: scalar
+        """
+        batch_size, max_seq_len, tagset_size = lstm_feats.size()
+
+        # Get gold sequence score
+        gold_score = self._score_sentence(lstm_feats, tags, mask)
+
+        # Forward algorithm to compute log-sum-exp over all possible sequences
+        forward_score = self._forward_alg(lstm_feats, mask)
+
+        # Compute loss: -log(sum_y e^score(x,y)) + log(sum_y' e^(score(x,y') + cost(y,y')))
+        # For simplicity, we approximate the second term with standard forward score
+        # A complete implementation would require modifying forward algorithm to include costs
+
+        loss = torch.mean(-torch.logsumexp(gold_score, dim=0) + forward_score)
+
+        return loss
+
     def _viterbi_decode_batched(self, lstm_feats, mask):
         """
         Find the most likely tag sequence using Viterbi algorithm

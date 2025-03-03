@@ -109,6 +109,12 @@ def train(
                     loss = model.softmax_margin_loss(
                         lstm_feats, tag_indices, mask, cost_factor
                     )
+                elif loss_type == "ramp_loss":
+                    loss = model.ramp_loss(lstm_feats, tag_indices, mask, cost_factor)
+                elif loss_type == "soft_ramp_loss":
+                    loss = model.soft_ramp_loss(
+                        lstm_feats, tag_indices, mask, cost_factor
+                    )
                 else:
                     raise ValueError(f"Unknown loss type: {loss_type}")
 
@@ -376,7 +382,7 @@ def main():
     parser.add_argument(
         "--loss_type",
         type=str,
-        choices=["nll", "max_margin", "softmax_margin"],
+        choices=["nll", "max_margin", "softmax_margin", "ramp_loss", "soft_ramp_loss"],
         default="nll",
         help="Type of loss function",
     )
@@ -450,6 +456,22 @@ def main():
     # Create optimizer
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
+    # Create model output directory
+    model_output_dir = args.output_dir
+
+    # For alternative loss model, include the loss type in the output directory
+    # but only if it's not already included in the path
+    if args.model_type == "bilstm_crf_alt_loss" and args.loss_type != "nll":
+        # Check if the loss type is already in the output directory path
+        if args.loss_type not in args.output_dir:
+            model_output_dir = f"{args.output_dir}_{args.loss_type}"
+        else:
+            model_output_dir = args.output_dir
+
+        # Create the directory if it doesn't exist
+        if not os.path.exists(model_output_dir):
+            os.makedirs(model_output_dir)
+
     # Train model
     model = train(
         model=model,
@@ -458,7 +480,7 @@ def main():
         optimizer=optimizer,
         device=device,
         epochs=args.epochs,
-        model_dir=args.output_dir,
+        model_dir=model_output_dir,
         loss_type=args.loss_type if args.model_type == "bilstm_crf_alt_loss" else "nll",
         cost_factor=args.cost_factor,
         evaluate_every=args.evaluate_every,

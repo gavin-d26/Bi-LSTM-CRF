@@ -30,11 +30,11 @@ def preprocess_data(args):
     Preprocess the data
     """
     cmd = f"python src/preprocess.py --data_dir {args.data_dir} --output_dir {args.output_dir}/data"
-    
+
     # Add subset parameter if specified
     if args.subset is not None:
         cmd += f" --subset {args.subset}"
-        
+
     return run_command(cmd)
 
 
@@ -43,6 +43,14 @@ def train_model(args):
     Train the model
     """
     model_dir = f"{args.output_dir}/models/{args.model_type}"
+
+    # For alternative loss model, include the loss type in the model directory
+    if args.model_type == "bilstm_crf_alt_loss" and hasattr(args, "loss_type"):
+        model_dir = f"{args.output_dir}/models/{args.model_type}_{args.loss_type}"
+
+    # Create model directory if it doesn't exist
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
 
     cmd = (
         f"python src/train.py --data_dir {args.output_dir}/data --output_dir {model_dir} "
@@ -71,14 +79,24 @@ def evaluate_model(args):
     Evaluate the model
     """
     model_dir = f"{args.output_dir}/models/{args.model_type}"
+
+    # For alternative loss model, include the loss type in the model directory
+    if args.model_type == "bilstm_crf_alt_loss" and hasattr(args, "loss_type"):
+        model_dir = f"{args.output_dir}/models/{args.model_type}_{args.loss_type}"
+
     results_dir = f"{args.output_dir}/results"
 
     # Create results directory if it doesn't exist
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
 
+    # For alternative loss model, include the loss type in the output filename
+    model_name = args.model_type
+    if args.model_type == "bilstm_crf_alt_loss" and hasattr(args, "loss_type"):
+        model_name = f"{args.model_type}_{args.loss_type}"
+
     # Run evaluation on dev set
-    dev_output = f"{results_dir}/{args.model_type}_dev.output"
+    dev_output = f"{results_dir}/{model_name}_dev.output"
     cmd = (
         f"python src/evaluate.py --model_path {model_dir}/best_model.pt "
         f"--vocabs_path {args.output_dir}/data/vocabs.pkl "
@@ -91,7 +109,7 @@ def evaluate_model(args):
     run_command(f"{args.data_dir}/evalIOB2.pl {args.data_dir}/dev.answers {dev_output}")
 
     # Run evaluation on test set
-    test_output = f"{results_dir}/{args.model_type}_test.output"
+    test_output = f"{results_dir}/{model_name}_test.output"
     cmd = (
         f"python src/evaluate.py --model_path {model_dir}/best_model.pt "
         f"--vocabs_path {args.output_dir}/data/vocabs.pkl "
@@ -208,7 +226,7 @@ def main():
     parser.add_argument(
         "--loss_type",
         type=str,
-        choices=["nll", "max_margin", "softmax_margin"],
+        choices=["nll", "max_margin", "softmax_margin", "ramp_loss", "soft_ramp_loss"],
         default="nll",
         help="Type of loss function",
     )
